@@ -32,6 +32,15 @@ class SimulationEngine:
         if road_id is None:
             return
 
+        # Don't spawn if the start of the road is already occupied
+        entry_gap = 14.0
+        occupied = any(
+            v.road_id == road_id and v.s < entry_gap
+            for v in self.vehicles.values()
+        )
+        if occupied:
+            return
+
         vid = self._next_vehicle_id
         self._next_vehicle_id += 1
 
@@ -96,11 +105,11 @@ class SimulationEngine:
 
             leader_s = min(s_target[head.id], L)
 
-            # followers: obey spacing
+            # followers: obey spacing, but never go before road start
             for follower in vehs[1:]:
                 desired = follower.s + follower.v * dt
                 max_allowed = leader_s - gap
-                s_target[follower.id] = min(desired, max_allowed)
+                s_target[follower.id] = max(0.0, min(desired, max_allowed))
                 leader_s = s_target[follower.id]
 
             # apply targets + handle intersection transitions safely
