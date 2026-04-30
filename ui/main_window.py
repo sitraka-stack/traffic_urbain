@@ -1,0 +1,113 @@
+from __future__ import annotations
+import time
+
+from PySide6.QtCore import QTimer,Qt
+from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout
+
+from core.engine import SimulationEngine
+from core.metrics import vehicle_count, avg_speed
+from core.network import RoadNetwork
+from core.io import save_network, load_network
+
+from ui.controls import Controls
+from ui.scene import MapScene, EditMode
+from ui.view import MapView
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Trafi_routier - Simulation de trafic (PySide6)")
+
+        self.net = RoadNetwork()
+        self.engine = SimulationEngine(self.net)
+
+        self.scene = MapScene(self.net)
+        self.view = MapView(self.scene)
+        self.view.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.view.setFocus()
+        self.controls = Controls()
+        self.scene.engine = self.engine
+
+        root = QWidget()
+        layout = QHBoxLayout(root)
+        layout.addWidget(self.view, 1)
+        layout.addWidget(self.controls, 0)
+        self.setCentralWidget(root)
+
+        # wire controls
+        self.controls.play_toggled.connect(self._on_play)
+        self.controls.speed_changed.connect(self._on_speed)
+        self.controls.mode_changed.connect(self._on_mode)
+        self.controls.save_requested.connect(self._on_save)
+        self.controls.load_requested.connect(self._on_load)
+
+        self._playing = True
+        self._speed_factor = 1.0
+        self._last_time = time.perf_counter()
+
+        self.timer = QTimer(self)
+        self.timer.setInterval(16)  # ~60 FPS
+        self.timer.timeout.connect(self._tick)
+        self.timer.start()
+
+        # nicer view default
+        self.view.setMinimumSize(900, 600)
+        
+        self.controls.traffic_green_changed.connect(self._set_all_green)
+        self.controls.traffic_red_changed.connect(self._set_all_red)
+        self._tl_green = 6.0
+        self._tl_red = 6.0
+        
+
+    def _on_play(self, playing: bool):
+        self._playing = playing
+        self._last_time = time.perf_counter()
+
+    def _on_speed(self, factor: float):
+        self._speed_factor = factor
+
+    def _on_mode(self, mode: EditMode):
+        self.scene.set_mode(mode)
+
+    def _on_save(self, path: str):
+        save_network(self.net, path)
+
+    def _on_load(self, path: str):
+        self.net = load_network(path)
+        self.engine = SimulationEngine(self.net)  # reset engine with new network
+
+        self.scene.net = self.net
+        self.scene.engine = self.engine  # <-- AJOUT IMPORTANT
+        self.scene.rebuild_from_network()
+        self.scene.sync_traffic_lights()
+    def _tick(self):
+        now = time.perf_counter()
+        dt_real = now - self._last_time
+        self._last_time = now
+
+        if self._playing:
+            dt = dt_real * self._speed_factor
+            # avoid huge dt if window was paused
+            dt = min(dt, 0.1)
+            self.engine.step(dt)
+            
+
+        # sync vehicles
+        poses = {vid: self.engine.vehicle_world_pose(v) for vid, v in self.engine.vehicles.items()}
+        self.scene.sync_vehicles(poses)
+        self.scene.sync_traffic_lights()
+
+        # stats
+        self.controls.set_stats(vehicle_count(self.engine.vehicles), avg_speed(self.engine.vehicles))
+        
+        
+    def _set_all_green(self, seconds: float):
+        self._tl_green = float(seconds)
+        for tl in self.net.traffic_lights.values():
+            tl.green = self._tl_green
+
+    def _set_all_red(self, seconds: float):
+        self._tl_red = float(seconds)
+        for tl in self.net.traffic_lights.values():
+            tl.red = self._tl_red
