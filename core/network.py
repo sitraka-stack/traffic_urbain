@@ -38,8 +38,15 @@ class RoadNetwork:
         rid_ab = self.add_directed_road(a, b, speed_limit=speed_limit, lanes=lanes)
         rid_ba = self.add_directed_road(b, a, speed_limit=speed_limit, lanes=lanes)
 
-        key = (min(a, b), max(a, b))
-        self.paired_roads[key] = (rid_ab, rid_ba)
+        # Store deterministically: key=(u,v) where u=min, v=max
+        # paired_roads[(u,v)] = (rid_uv, rid_vu)
+        u, v = min(a, b), max(a, b)
+        key = (u, v)
+        if a <= b:
+            rid_uv, rid_vu = rid_ab, rid_ba  # rid_ab goes a->b = u->v
+        else:
+            rid_uv, rid_vu = rid_ba, rid_ab  # rid_ba goes b->a = u->v (since a>b means b<a=u)
+        self.paired_roads[key] = (rid_uv, rid_vu)
         return rid_ab, rid_ba
     def outgoing_roads(self, node_id: int) -> List[int]:
         return [rid for rid, r in self.roads.items() if r.a == node_id]
