@@ -32,16 +32,22 @@ class SimulationEngine:
         if road_id is None:
             return
 
+        # Don't spawn if the start of the road is already occupied
+        entry_gap = 14.0
+        occupied = any(
+            v.road_id == road_id and v.s < entry_gap
+            for v in self.vehicles.values()
+        )
+        if occupied:
+            return
+
         vid = self._next_vehicle_id
         self._next_vehicle_id += 1
 
         speed_limit = self.net.roads[road_id].speed_limit
         v = max(2.0, min(speed_limit, self.rng.uniform(6.0, speed_limit)))
 
-        lanes = max(1, self.net.roads[road_id].lanes)
-        lane = self.rng.randrange(lanes)
-
-        self.vehicles[vid] = Vehicle(id=vid, road_id=road_id, s=0.0, v=v, lane=lane)
+        self.vehicles[vid] = Vehicle(id=vid, road_id=road_id, s=0.0, v=v, lane=0)
     
     def step(self, dt: float) -> None:
         # update traffic lights
@@ -99,11 +105,11 @@ class SimulationEngine:
 
             leader_s = min(s_target[head.id], L)
 
-            # followers: obey spacing
+            # followers: obey spacing, but never go before road start
             for follower in vehs[1:]:
                 desired = follower.s + follower.v * dt
                 max_allowed = leader_s - gap
-                s_target[follower.id] = min(desired, max_allowed)
+                s_target[follower.id] = max(0.0, min(desired, max_allowed))
                 leader_s = s_target[follower.id]
 
             # apply targets + handle intersection transitions safely
@@ -149,6 +155,7 @@ class SimulationEngine:
     def vehicle_world_pose(self, veh: Vehicle) -> Tuple[float, float, float]:
         """
         Returns (x, y, angle_degrees) in world coordinates for UI drawing.
+        Vehicles on the forward road (u->v) are offset left; reverse (v->u) offset right.
         """
         road = self.net.roads[veh.road_id]
         na = self.net.nodes[road.a]
@@ -158,25 +165,27 @@ class SimulationEngine:
 
         x = na.x + (nb.x - na.x) * t
         y = na.y + (nb.y - na.y) * t
-        
-        
 
-        # Qt rotation is degrees, clockwise is positive visually depending on transform,
-        # we keep a simple convention: angle from +x axis.
-        dx = nb.x - na.x
-        dy = nb.y - na.y
-        L = math.hypot(dx, dy) or 1.0
-        nx = -dy / L   # normale (perpendiculaire)
-        ny = dx / L
+        # Use paired_roads convention to offset vehicle onto the correct visual lane
+        u, v = min(road.a, road.b), max(road.a, road.b)
+        key = (u, v)
+        rid_uv, rid_vu = self.net.paired_roads.get(key, (None, None))
 
-        lane_width = 10.0  # pixels ~ (comme unités du monde)
-        # lane 0 => -0.5, lane 1 => +0.5 (centré)
-        lanes = max(1, road.lanes)
-        centered = (veh.lane - (lanes - 1) / 2.0)
-        offset = centered * lane_width
+        if rid_uv is not None:
+            # canonical direction u->v: compute left-hand normal
+            nu = self.net.nodes[u]
+            nv = self.net.nodes[v]
+            cdx = nv.x - nu.x
+            cdy = nv.y - nu.y
+            cL = math.hypot(cdx, cdy) or 1.0
+            nx = -cdy / cL  # left normal of u->v
+            ny = cdx / cL
 
-        x += nx * offset
-        y += ny * offset
+            offset = 8.0
+            # forward (u->v) => left (+offset); reverse (v->u) => right (-offset)
+            sign = 1.0 if veh.road_id == rid_uv else -1.0
+            x += nx * offset * sign
+            y += ny * offset * sign
 
         ang = math.degrees(road.angle_rad(self.net))
         return x, y, ang

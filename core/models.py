@@ -41,4 +41,5 @@ class Vehicle:
     road_id: int
     s: float = 0.0  # position along road [0..length]
     v: float = 10.0  # m/s
+    lane: int = 0  # lane index (0 = single lane per directed road)
     

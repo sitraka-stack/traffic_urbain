@@ -72,7 +72,11 @@ class RoadItem(QGraphicsPathItem):
         ny = dx / L
 
         offset = 8.0
-        sign = 1.0 if is_forward else -1.0
+        if rid_uv is None:
+            # unpaired/single road: draw centered
+            sign = 0.0
+        else:
+            sign = 1.0 if is_forward else -1.0
 
         ax2 = ax + nx * offset * sign
         ay2 = ay + ny * offset * sign
