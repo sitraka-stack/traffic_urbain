@@ -13,6 +13,7 @@ class EditMode(Enum):
     SELECT = auto()
     ADD_NODE = auto()
     ADD_ROAD = auto()
+    ADD_ROUNDABOUT = auto()
 
 
 class MapScene(QGraphicsScene):
@@ -92,6 +93,11 @@ class MapScene(QGraphicsScene):
                         self._add_road_item(rid_ba)
                     self._pending_road_from = None
                 return
+
+        if self.mode == EditMode.ADD_ROUNDABOUT:
+            self.net.create_roundabout(pos.x(), pos.y())
+            self.rebuild_from_network()
+            return
 
         return super().mousePressEvent(event)
 
@@ -192,5 +198,10 @@ class MapScene(QGraphicsScene):
         for nid, tl in self.net.traffic_lights.items():
             item = self.traffic_light_items.get(nid)
             if item:
-                item.set_state(tl.is_green())
+                # Si au moins une route est verte, on affiche vert
+                # Sinon si au moins une est orange, orange
+                incomings = self.net.incoming_roads(nid)
+                any_green = any(tl.is_green(rid) for rid in incomings)
+                any_yellow = any(tl.is_yellow(rid) for rid in incomings)
+                item.set_state(any_green, any_yellow)
 

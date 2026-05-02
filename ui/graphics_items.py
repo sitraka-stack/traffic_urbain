@@ -41,6 +41,7 @@ class RoadItem(QGraphicsPathItem):
 
     def refresh_from_network(self, net: RoadNetwork):
         from PySide6.QtGui import QPainterPath
+        from core.models import LANE_WIDTH
         import math
 
         r = net.roads[self.road_id]
@@ -50,41 +51,29 @@ class RoadItem(QGraphicsPathItem):
         ax, ay = a.x, a.y
         bx, by = b.x, b.y
 
-        # Segment physique (u,v)
-        u, v = (r.a, r.b) if r.a < r.b else (r.b, r.a)
-        key = (u, v)
-        rid_uv, rid_vu = net.paired_roads.get(key, (None, None))
-
-        # Si c'est la voie "avant" (u->v) => gauche ; sinon => droite
-        is_forward = (self.road_id == rid_uv)
-
-        # Direction canonique u -> v (pour une normale stable)
-        nu = net.nodes[u]
-        nv = net.nodes[v]
-        dx = nv.x - nu.x
-        dy = nv.y - nu.y
+        dx = bx - ax
+        dy = by - ay
         L = math.hypot(dx, dy)
         if L < 1e-6:
             return
 
-        # normale "gauche" de u->v
-        nx = -dy / L
-        ny = dx / L
+        # Normale droite (conduite à droite)
+        nx = dy / L
+        ny = -dx / L
 
-        offset = 8.0
-        sign = 1.0 if is_forward else -1.0
+        # On décale le milieu du tracé de la moitié de sa largeur vers la droite
+        offset = (r.lanes * LANE_WIDTH) / 2.0
 
-        ax2 = ax + nx * offset * sign
-        ay2 = ay + ny * offset * sign
-        bx2 = bx + nx * offset * sign
-        by2 = by + ny * offset * sign
+        ax2 = ax + nx * offset
+        ay2 = ay + ny * offset
+        bx2 = bx + nx * offset
+        by2 = by + ny * offset
 
         path = QPainterPath(QPointF(ax2, ay2))
         path.lineTo(QPointF(bx2, by2))
         self.setPath(path)
 
-        # une voie = trait fin ; tu peux épaissir si tu veux
-        self.setPen(QPen(Qt.GlobalColor.darkGray, 5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        self.setPen(QPen(Qt.GlobalColor.darkGray, r.lanes * LANE_WIDTH, Qt.PenStyle.SolidLine, Qt.PenCapStyle.FlatCap))
         
         
 class VehicleItem(QGraphicsPolygonItem):
@@ -115,5 +104,10 @@ class TrafficLightItem(QGraphicsEllipseItem):
         self.setPen(QPen(Qt.GlobalColor.black, 1))
         self.setBrush(QBrush(Qt.GlobalColor.red))
 
-    def set_state(self, green: bool):
-        self.setBrush(QBrush(Qt.GlobalColor.green if green else Qt.GlobalColor.red))
+    def set_state(self, green: bool, yellow: bool = False):
+        if green:
+            self.setBrush(QBrush(Qt.GlobalColor.green))
+        elif yellow:
+            self.setBrush(QBrush(Qt.GlobalColor.yellow))
+        else:
+            self.setBrush(QBrush(Qt.GlobalColor.red))

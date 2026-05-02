@@ -1,7 +1,9 @@
 from __future__ import annotations
 import time
+from collections import defaultdict
 
-from PySide6.QtCore import QTimer,Qt
+from PySide6.QtCore import QTimer, Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout
 
 from core.engine import SimulationEngine
@@ -54,8 +56,12 @@ class MainWindow(QMainWindow):
         # nicer view default
         self.view.setMinimumSize(900, 600)
         
+        self.statusBar().showMessage("Prêt")
+        
         self.controls.traffic_green_changed.connect(self._set_all_green)
         self.controls.traffic_red_changed.connect(self._set_all_red)
+        self.controls.spawn_rate_changed.connect(self._on_spawn_rate)
+        self.controls.clear_requested.connect(self._on_clear)
         self._tl_green = 6.0
         self._tl_red = 6.0
         
@@ -66,6 +72,19 @@ class MainWindow(QMainWindow):
 
     def _on_speed(self, factor: float):
         self._speed_factor = factor
+
+    def _on_spawn_rate(self, rate: float):
+        self.engine.spawn_rate = rate
+
+    def _on_clear(self):
+        from core.network import RoadNetwork
+        from core.engine import SimulationEngine
+        self.net = RoadNetwork()
+        self.engine = SimulationEngine(self.net)
+        self.scene.net = self.net
+        self.scene.engine = self.engine
+        self.scene.rebuild_from_network()
+        self.scene.sync_vehicles({})
 
     def _on_mode(self, mode: EditMode):
         self.scene.set_mode(mode)
@@ -99,7 +118,43 @@ class MainWindow(QMainWindow):
         self.scene.sync_traffic_lights()
 
         # stats
-        self.controls.set_stats(vehicle_count(self.engine.vehicles), avg_speed(self.engine.vehicles))
+        metrics = self.engine.get_advanced_metrics()
+        self.controls.set_stats(metrics)
+
+        # Analysis: Heatmap
+        self._update_heatmap()
+        
+        # Status bar info
+        status = f"Temps sim: {self.engine.current_time:.1f}s | Véhicules: {len(self.engine.vehicles)} | "
+        status += "EN PAUSE" if not self._playing else f"Vitesse: {self._speed_factor:.1f}x"
+        self.statusBar().showMessage(status)
+
+    def _update_heatmap(self):
+        # Calculate avg speed per road
+        road_speeds = defaultdict(list)
+        for v in self.engine.vehicles.values():
+            road_speeds[v.road_id].append(v.v)
+        
+        for rid, item in self.scene.road_items.items():
+            road = self.net.roads.get(rid)
+            if not road: continue
+            
+            speeds = road_speeds.get(rid, [])
+            if not speeds:
+                # No cars = Fluid
+                color = QColor("darkGray")
+            else:
+                avg_v = sum(speeds) / len(speeds)
+                ratio = avg_v / road.speed_limit
+                
+                # Lerp between Red (0) and Green (1)
+                if ratio < 0.3: color = QColor("red")
+                elif ratio < 0.7: color = QColor("orange")
+                else: color = QColor("darkGray")
+            
+            pen = item.pen()
+            pen.setColor(color)
+            item.setPen(pen)
         
         
     def _set_all_green(self, seconds: float):
