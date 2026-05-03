@@ -61,6 +61,7 @@ class MainWindow(QMainWindow):
         self.controls.traffic_green_changed.connect(self._set_all_green)
         self.controls.traffic_red_changed.connect(self._set_all_red)
         self.controls.spawn_rate_changed.connect(self._on_spawn_rate)
+        self.controls.manual_spawn_requested.connect(self._on_manual_spawn)
         self.controls.clear_requested.connect(self._on_clear)
         self._tl_green = 6.0
         self._tl_red = 6.0
@@ -75,6 +76,9 @@ class MainWindow(QMainWindow):
 
     def _on_spawn_rate(self, rate: float):
         self.engine.spawn_rate = rate
+
+    def _on_manual_spawn(self, count: int):
+        self.engine.spawn_multiple(count)
 
     def _on_clear(self):
         from core.network import RoadNetwork

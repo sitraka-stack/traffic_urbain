@@ -1,6 +1,6 @@
 from __future__ import annotations
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QWheelEvent
+from PySide6.QtGui import QWheelEvent, QPainter
 from PySide6.QtWidgets import QGraphicsView
 
 
@@ -8,7 +8,8 @@ class MapView(QGraphicsView):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.setRenderHints(self.renderHints())
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
 
         # pan

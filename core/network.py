@@ -16,6 +16,14 @@ class RoadNetwork:
     _next_node_id: int = 1
     _next_road_id: int = 1
 
+    STREET_NAMES = [
+        "Avenue de Paris", "Rue de la Paix", "Boulevard Saint-Germain", 
+        "Rue de Rivoli", "Avenue des Champs-Élysées", "Rue Lafayette",
+        "Boulevard Haussmann", "Rue de Rennes", "Avenue Foch",
+        "Rue de Vaugirard", "Boulevard de Sébastopol", "Avenue Victor Hugo",
+        "Rue de Châteaudun", "Boulevard Malesherbes", "Rue de Rome"
+    ]
+
     def add_node(self, x: float, y: float) -> int:
         nid = self._next_node_id
         self._next_node_id += 1
@@ -75,16 +83,24 @@ class RoadNetwork:
         n.x = x
         n.y = y
 
-    def add_directed_road(self, a: int, b: int, speed_limit: float = 13.9, lanes: int = 1 ) -> int:
+    def add_directed_road(self, a: int, b: int, speed_limit: float = 13.9, lanes: int = 1, name: str = "" ) -> int:
         rid = self._next_road_id
         self._next_road_id += 1
-        self.roads[rid] = DirectedRoad(id=rid, a=a, b=b, speed_limit=speed_limit, lanes=lanes)
+        
+        if not name:
+            import random
+            name = random.choice(self.STREET_NAMES)
+            
+        self.roads[rid] = DirectedRoad(id=rid, a=a, b=b, name=name, speed_limit=speed_limit, lanes=lanes)
         self.recalculate_traffic_light_phases(b)
         return rid
 
     def add_bidirectional_road(self, a: int, b: int, speed_limit: float = 13.9, lanes: int = 1) -> Tuple[int, int]:
-        rid_ab = self.add_directed_road(a, b, speed_limit=speed_limit, lanes=lanes)
-        rid_ba = self.add_directed_road(b, a, speed_limit=speed_limit, lanes=lanes)
+        import random
+        name = random.choice(self.STREET_NAMES)
+        
+        rid_ab = self.add_directed_road(a, b, speed_limit=speed_limit, lanes=lanes, name=name)
+        rid_ba = self.add_directed_road(b, a, speed_limit=speed_limit, lanes=lanes, name=name)
 
         key = (min(a, b), max(a, b))
         self.paired_roads[key] = (rid_ab, rid_ba)
@@ -116,8 +132,50 @@ class RoadNetwork:
             a = nids[i]
             b = nids[(i + 1) % num_nodes]
             # One way road in the circle
-            rid = self.add_directed_road(a, b, lanes=1)
+            rid = self.add_directed_road(a, b, lanes=2, name="Rond-point")
             # Roundabout priority
             self.roads[rid].priority = 2
             rids.append(rid)
         return rids
+
+    def shortest_path(self, start_node: int, end_node: int) -> List[int]:
+        """
+        Dijkstra's algorithm to find the shortest path between two nodes.
+        Returns a list of road IDs.
+        """
+        import heapq
+
+        distances = {nid: float('inf') for nid in self.nodes}
+        distances[start_node] = 0
+        pq = [(0, start_node)]
+        previous_road = {} # node_id -> road_id to get there
+        previous_node = {} # node_id -> node_id to get there
+
+        while pq:
+            d, u = heapq.heappop(pq)
+            if d > distances[u]:
+                continue
+            if u == end_node:
+                break
+
+            for rid in self.outgoing_roads(u):
+                road = self.roads[rid]
+                v = road.b
+                weight = road.length(self)
+                if distances[u] + weight < distances[v]:
+                    distances[v] = distances[u] + weight
+                    previous_road[v] = rid
+                    previous_node[v] = u
+                    heapq.heappush(pq, (distances[v], v))
+
+        if end_node not in previous_node:
+            return []
+
+        path = []
+        curr = end_node
+        while curr != start_node:
+            rid = previous_road[curr]
+            path.append(rid)
+            curr = previous_node[curr]
+
+        return path[::-1]

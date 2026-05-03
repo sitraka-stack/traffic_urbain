@@ -3,6 +3,7 @@ from enum import Enum, auto
 from typing import Dict, Optional
 
 from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import QGraphicsScene
 
 from core.network import RoadNetwork
@@ -33,6 +34,7 @@ class MapScene(QGraphicsScene):
         self.traffic_light_items: Dict[int, TrafficLightItem] = {}
 
         self.setSceneRect(-2000, -2000, 4000, 4000)
+        self.setBackgroundBrush(QBrush(QColor("#ecf0f1")))
 
     def set_mode(self, mode: EditMode) -> None:
         self.mode = mode
@@ -180,7 +182,13 @@ class MapScene(QGraphicsScene):
         # create missing items
         for vid in vehicle_poses.keys():
             if vid not in self.vehicle_items:
-                item = VehicleItem(vid)
+                color = "blue"
+                length = 5.0
+                if self.engine and vid in self.engine.vehicles:
+                    color = self.engine.vehicles[vid].color
+                    length = self.engine.vehicles[vid].length
+                
+                item = VehicleItem(vid, color=color, length=length)
                 self.addItem(item)
                 self.vehicle_items[vid] = item
 

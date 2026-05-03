@@ -18,6 +18,7 @@ class Controls(QWidget):
     traffic_green_changed = Signal(float)  # seconds
     traffic_red_changed = Signal(float)    # seconds
     spawn_rate_changed = Signal(float)     # veh/s
+    manual_spawn_requested = Signal(int)    # count
     clear_requested = Signal()
 
     def __init__(self):
@@ -48,28 +49,49 @@ class Controls(QWidget):
         layout.addLayout(row0)
 
         # simulation parameters
-        sim_box = QGroupBox("Paramètres Simulation")
+        sim_box = QGroupBox("Génération de Véhicules")
         sim_l = QVBoxLayout(sim_box)
 
-        # speed slider
+        # --- AUTO ---
+        auto_box = QGroupBox("Mode Automatique")
+        auto_l = QVBoxLayout(auto_box)
+        self.spawn_label = QLabel("Taux: 0.4 veh/s")
+        self.spawn_slider = QSlider(Qt.Orientation.Horizontal)
+        self.spawn_slider.setRange(0, 50)    # 0.0 .. 5.0
+        self.spawn_slider.setValue(4)        # 0.4
+        self.spawn_slider.valueChanged.connect(self._on_spawn)
+        auto_l.addWidget(self.spawn_label)
+        auto_l.addWidget(self.spawn_slider)
+        sim_l.addWidget(auto_box)
+
+        # --- MANUAL ---
+        manual_box = QGroupBox("Mode Manuel")
+        manual_l = QVBoxLayout(manual_box)
+        from PySide6.QtWidgets import QSpinBox
+        row_man = QHBoxLayout()
+        self.spawn_count = QSpinBox()
+        self.spawn_count.setRange(1, 100)
+        self.spawn_count.setValue(5)
+        self.spawn_btn = QPushButton("Ajouter")
+        self.spawn_btn.clicked.connect(lambda: self.manual_spawn_requested.emit(self.spawn_count.value()))
+        row_man.addWidget(self.spawn_count)
+        row_man.addWidget(self.spawn_btn)
+        manual_l.addLayout(row_man)
+        sim_l.addWidget(manual_box)
+
+        layout.addWidget(sim_box)
+
+        # speed slider (move it outside spawn box)
+        speed_box = QGroupBox("Vitesse Simulation")
+        speed_l = QVBoxLayout(speed_box)
         self.speed_label = QLabel("Vitesse: 1.0x")
         self.speed_slider = QSlider(Qt.Orientation.Horizontal)
         self.speed_slider.setRange(1, 100)   # 0.1 .. 10.0
         self.speed_slider.setValue(10)       # 1.0
         self.speed_slider.valueChanged.connect(self._on_speed)
-        sim_l.addWidget(self.speed_label)
-        sim_l.addWidget(self.speed_slider)
-
-        # spawn rate
-        self.spawn_label = QLabel("Apparition: 0.4 veh/s")
-        self.spawn_slider = QSlider(Qt.Orientation.Horizontal)
-        self.spawn_slider.setRange(0, 20)    # 0.0 .. 2.0
-        self.spawn_slider.setValue(4)        # 0.4
-        self.spawn_slider.valueChanged.connect(self._on_spawn)
-        sim_l.addWidget(self.spawn_label)
-        sim_l.addWidget(self.spawn_slider)
-
-        layout.addWidget(sim_box)
+        speed_l.addWidget(self.speed_label)
+        speed_l.addWidget(self.speed_slider)
+        layout.addWidget(speed_box)
 
         # traffic lights controls (0.1s .. 30.0s)
         tl_box = QGroupBox("Feux de circulation (secondes)")
@@ -143,6 +165,15 @@ class Controls(QWidget):
         stats_l.addWidget(self.lbl_congestion)
         layout.addWidget(stats_box)
 
+        # AI Advisor
+        advisor_box = QGroupBox("Assistant Trafic (IA)")
+        advisor_l = QVBoxLayout(advisor_box)
+        self.lbl_advice = QLabel("Analyse en cours...")
+        self.lbl_advice.setWordWrap(True)
+        self.lbl_advice.setStyleSheet("color: #2c3e50; font-style: italic; background: #ecf0f1; padding: 5px; border-radius: 3px;")
+        advisor_l.addWidget(self.lbl_advice)
+        layout.addWidget(advisor_box)
+
         # Legend
         legend_box = QGroupBox("Légende Heatmap")
         legend_l = QVBoxLayout(legend_box)
@@ -204,6 +235,21 @@ class Controls(QWidget):
         elif metrics['congestion_level'] == "Dense": color = "red"
         elif metrics['congestion_level'] == "Bouchon": color = "darkred"
         self.lbl_congestion.setStyleSheet(f"color: {color}; font-weight: bold;")
+
+        # AI Advisor Logic
+        advice = "Circulation optimale. RAS."
+        if metrics['count'] > 0:
+            if metrics['congestion_level'] == "Bouchon":
+                advice = "<b>CRITIQUE :</b> Réduisez le taux d'apparition et augmentez le temps de vert aux intersections majeures."
+            elif metrics['congestion_level'] == "Dense":
+                advice = "<b>ALERTE :</b> Trafic saturé sur " + metrics['busiest_road'] + ". Envisagez de fluidifier les sorties."
+            elif metrics['congestion_level'] == "Modéré":
+                advice = "<b>INFO :</b> Quelques ralentissements. Vérifiez le séquençage des feux."
+            
+            if metrics['waiting_count'] > metrics['count'] * 0.5:
+                advice += "<br/><i>Conseil : Trop de véhicules à l'arrêt.</i>"
+        
+        self.lbl_advice.setText(advice)
 
     def _toggle_play(self):
         self.playing = not self.playing
