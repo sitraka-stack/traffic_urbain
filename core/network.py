@@ -2,19 +2,32 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
 from .traffic_lights import TrafficLight
-from .models import Node, DirectedRoad
+from .models import Node, DirectedRoad, Building
 
 
 @dataclass
 class RoadNetwork:
     nodes: Dict[int, Node] = field(default_factory=dict)
     roads: Dict[int, DirectedRoad] = field(default_factory=dict)
+    buildings: Dict[int, Building] = field(default_factory=dict)
     traffic_lights: Dict[int, TrafficLight] = field(default_factory=dict)
     # dans RoadNetwork dataclass
     paired_roads: Dict[tuple[int, int], tuple[int, int]] = field(default_factory=dict)
 
     _next_node_id: int = 1
     _next_road_id: int = 1
+    _next_building_id: int = 1
+
+    # ... keep STREET_NAMES ...
+
+    def add_building(self, x: float, y: float, w: float, h: float, angle: float, color: str = "") -> int:
+        bid = self._next_building_id
+        self._next_building_id += 1
+        if not color:
+            import random
+            color = random.choice(["#dfe6e9", "#f7f1e3", "#f19066", "#f8a5c2", "#cf6a87"])
+        self.buildings[bid] = Building(id=bid, x=x, y=y, width=w, height=h, angle=angle, color=color)
+        return bid
 
     STREET_NAMES = [
         "Avenue de Paris", "Rue de la Paix", "Boulevard Saint-Germain", 
@@ -93,7 +106,47 @@ class RoadNetwork:
             
         self.roads[rid] = DirectedRoad(id=rid, a=a, b=b, name=name, speed_limit=speed_limit, lanes=lanes)
         self.recalculate_traffic_light_phases(b)
+        
+        # Procedural buildings along the road
+        self._generate_buildings_along_road(rid)
+        
         return rid
+
+    def _generate_buildings_along_road(self, road_id: int):
+        import random
+        import math
+        road = self.roads[road_id]
+        na, nb = self.nodes[road.a], self.nodes[road.b]
+        
+        L = road.length(self)
+        if L < 30: return
+        
+        angle = road.angle_rad(self)
+        nx, ny = -math.sin(angle), math.cos(angle) # Normal vector
+        
+        # Add buildings on both sides
+        num_houses = int(L / 25)
+        for i in range(num_houses):
+            dist = i * 25 + 12
+            # Base position on road
+            bx = na.x + math.cos(angle) * dist
+            by = na.y + math.sin(angle) * dist
+            
+            # Offset to side (outside lanes)
+            from .models import LANE_WIDTH
+            side_offset = (road.lanes * LANE_WIDTH) + random.uniform(15, 25)
+            
+            # Left side
+            if random.random() < 0.7:
+                self.add_building(bx + nx * side_offset, by + ny * side_offset, 
+                                 random.uniform(15, 25), random.uniform(15, 25), 
+                                 math.degrees(angle))
+            
+            # Right side
+            if random.random() < 0.7:
+                self.add_building(bx - nx * side_offset, by - ny * side_offset, 
+                                 random.uniform(15, 25), random.uniform(15, 25), 
+                                 math.degrees(angle))
 
     def add_bidirectional_road(self, a: int, b: int, speed_limit: float = 13.9, lanes: int = 1) -> Tuple[int, int]:
         import random

@@ -203,3 +203,19 @@ class TrafficLightItem(QGraphicsRectItem):
             self.yellow_light.setBrush(QBrush(Qt.GlobalColor.yellow))
         else:
             self.red_light.setBrush(QBrush(Qt.GlobalColor.red))
+
+
+class BuildingItem(QGraphicsRectItem):
+    def __init__(self, x: float, y: float, w: float, h: float, angle: float, color: str):
+        super().__init__(-w/2, -h/2, w, h)
+        self.setPos(x, y)
+        self.setRotation(angle)
+        self.setBrush(QBrush(QColor(color)))
+        self.setPen(QPen(QColor("#2c3e50"), 1))
+        self.setZValue(-5)
+
+        # Roof detail
+        self.roof = QGraphicsRectItem(-w/2 + 2, -h/2 + 2, w - 4, h - 4, self)
+        roof_color = QColor(color).darker(110)
+        self.roof.setBrush(QBrush(roof_color))
+        self.roof.setPen(Qt.PenStyle.NoPen)

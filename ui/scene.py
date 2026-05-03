@@ -7,7 +7,7 @@ from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import QGraphicsScene
 
 from core.network import RoadNetwork
-from ui.graphics_items import NodeItem, RoadItem, VehicleItem, TrafficLightItem
+from ui.graphics_items import NodeItem, RoadItem, VehicleItem, TrafficLightItem, BuildingItem
 
 
 class EditMode(Enum):
@@ -15,6 +15,7 @@ class EditMode(Enum):
     ADD_NODE = auto()
     ADD_ROAD = auto()
     ADD_ROUNDABOUT = auto()
+    ADD_BUILDING = auto()
 
 
 class MapScene(QGraphicsScene):
@@ -30,6 +31,7 @@ class MapScene(QGraphicsScene):
 
         self.node_items: Dict[int, NodeItem] = {}
         self.road_items: Dict[int, RoadItem] = {}
+        self.building_items: Dict[int, BuildingItem] = {}
         self.vehicle_items: Dict[int, VehicleItem] = {}
         self.traffic_light_items: Dict[int, TrafficLightItem] = {}
 
@@ -44,6 +46,7 @@ class MapScene(QGraphicsScene):
         self.clear()
         self.node_items.clear()
         self.road_items.clear()
+        self.building_items.clear()
         self.vehicle_items.clear()
         self.traffic_light_items.clear()
 
@@ -52,6 +55,17 @@ class MapScene(QGraphicsScene):
 
         for rid in sorted(self.net.roads.keys()):
             self._add_road_item(rid)
+            
+        for bid, b in self.net.buildings.items():
+            self._add_building_item(bid)
+
+    def _add_building_item(self, bid: int) -> None:
+        b = self.net.buildings[bid]
+        item = BuildingItem(b.x, b.y, b.width, b.height, b.angle, b.color)
+        item.setFlag(item.GraphicsItemFlag.ItemIsMovable, True)
+        item.setFlag(item.GraphicsItemFlag.ItemIsSelectable, True)
+        self.addItem(item)
+        self.building_items[bid] = item
 
     def _add_node_item(self, node_id: int, x: float, y: float) -> None:
         item = NodeItem(node_id, x, y)
@@ -99,6 +113,15 @@ class MapScene(QGraphicsScene):
         if self.mode == EditMode.ADD_ROUNDABOUT:
             self.net.create_roundabout(pos.x(), pos.y())
             self.rebuild_from_network()
+            return
+
+        if self.mode == EditMode.ADD_BUILDING:
+            import random
+            w = random.uniform(20, 50)
+            h = random.uniform(20, 50)
+            angle = random.uniform(0, 360)
+            bid = self.net.add_building(pos.x(), pos.y(), w, h, angle)
+            self._add_building_item(bid)
             return
 
         return super().mousePressEvent(event)

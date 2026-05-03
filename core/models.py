@@ -1,7 +1,9 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from math import atan2, sqrt
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List, Optional, Tuple, Dict
+from collections import defaultdict
 
 LANE_WIDTH = 12.0  # pixels
 
@@ -16,6 +18,12 @@ class Node:
     y: float
 
 
+class RoadState(Enum):
+    FLUID = 0
+    SLOW = 1
+    JAM = 2
+
+
 @dataclass
 class DirectedRoad:
     id: int
@@ -25,6 +33,16 @@ class DirectedRoad:
     speed_limit: float = 13.9  # m/s (~50 km/h)
     lanes: int = 1
     priority: int = 0  # 0: normal, 1: priority road, -1: yield/stop
+    
+    # Advanced Metrics
+    current_state: RoadState = RoadState.FLUID
+    queue_length: int = 0
+    total_wait_time: float = 0.0
+    saturation_rate: float = 0.0
+    
+    # Markov Chain helper
+    state_history: List[RoadState] = field(default_factory=list)
+    transition_counts: Dict[Tuple[RoadState, RoadState], int] = field(default_factory=lambda: defaultdict(int))
 
     def length(self, net: "RoadNetwork") -> float:
         na = net.nodes[self.a]
@@ -39,13 +57,22 @@ class DirectedRoad:
         return atan2(nb.y - na.y, nb.x - na.x)
 
 
-from enum import Enum, auto
+@dataclass
+class Building:
+    id: int
+    x: float
+    y: float
+    width: float
+    height: float
+    angle: float
+    color: str = "#d2dae2"
 
 class VehicleType(Enum):
     CAR = auto()
     TRUCK = auto()
     BUS = auto()
     MOTORCYCLE = auto()
+
 
 @dataclass
 class Vehicle:
@@ -81,4 +108,3 @@ class Vehicle:
             self.length = 2.0
             self.max_accel = 2.5
             self.max_decel = 4.0
-    

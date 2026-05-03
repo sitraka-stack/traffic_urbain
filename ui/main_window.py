@@ -62,6 +62,7 @@ class MainWindow(QMainWindow):
         self.controls.traffic_red_changed.connect(self._set_all_red)
         self.controls.spawn_rate_changed.connect(self._on_spawn_rate)
         self.controls.manual_spawn_requested.connect(self._on_manual_spawn)
+        self.controls.monte_carlo_requested.connect(self._on_monte_carlo)
         self.controls.clear_requested.connect(self._on_clear)
         self._tl_green = 6.0
         self._tl_red = 6.0
@@ -79,6 +80,12 @@ class MainWindow(QMainWindow):
 
     def _on_manual_spawn(self, count: int):
         self.engine.spawn_multiple(count)
+
+    def _on_monte_carlo(self):
+        self.statusBar().showMessage("Calcul Monte Carlo en cours...")
+        res = self.engine.run_monte_carlo(num_iterations=10, duration=60.0)
+        self.controls.set_monte_carlo_results(res)
+        self.statusBar().showMessage("Monte Carlo terminé", 5000)
 
     def _on_clear(self):
         from core.network import RoadNetwork
@@ -123,7 +130,22 @@ class MainWindow(QMainWindow):
 
         # stats
         metrics = self.engine.get_advanced_metrics()
-        self.controls.set_stats(metrics)
+        
+        # New: Get max queue and dominant markov state
+        max_q = 0
+        state_counts = defaultdict(int)
+        for r in self.net.roads.values():
+            max_q = max(max_q, r.queue_length)
+            state_counts[r.current_state] += 1
+        
+        dominant_state = "Fluide"
+        if state_counts:
+            # Get the state name from the Enum
+            from core.models import RoadState
+            dom_enum = max(state_counts, key=state_counts.get)
+            dominant_state = dom_enum.name
+            
+        self.controls.set_stats(metrics, max_queue=max_q, markov_state=dominant_state)
 
         # Analysis: Heatmap
         self._update_heatmap()
